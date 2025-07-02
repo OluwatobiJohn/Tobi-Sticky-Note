@@ -1,391 +1,302 @@
 import React, { useState, useEffect, useRef } from "react";
 
-// Note: In your local environment, replace the state management below with localStorage
-// localStorage isn't available in this demo environment, but the code is included for reference
-
-const Note = ({ children, index, onChange, onRemove, id }) => {
+const Note = ({ note, onChange, onRemove, onPositionChange }) => {
   const [editing, setEditing] = useState(false);
-  const [position] = useState(() => ({
-    right: randomBetween(0, window.innerWidth - 150) + "px",
-    top: randomBetween(0, window.innerHeight - 150) + "px",
-    transform: "rotate(" + randomBetween(-15, 15) + "deg)",
-  }));
+  const [isHovered, setIsHovered] = useState(false);
   const noteRef = useRef(null);
   const textareaRef = useRef(null);
 
-  function randomBetween(min, max) {
-    return min + Math.ceil(Math.random() * max);
-  }
-
   useEffect(() => {
-    // Make note draggable (simplified version without jQuery)
+    // Simple drag functionality
     if (noteRef.current) {
       let isDragging = false;
-      let currentX;
-      let currentY;
-      let initialX;
-      let initialY;
-      let xOffset = 0;
-      let yOffset = 0;
+      let startX, startY, initialX, initialY;
 
-      const dragStart = (e) => {
-        if (e.type === "touchstart") {
-          initialX = e.touches[0].clientX - xOffset;
-          initialY = e.touches[0].clientY - yOffset;
-        } else {
-          initialX = e.clientX - xOffset;
-          initialY = e.clientY - yOffset;
+      const handleMouseDown = (e) => {
+        // Don't start dragging if clicking on buttons or textarea
+        if (e.target.tagName === "BUTTON" || e.target.tagName === "TEXTAREA") {
+          return;
         }
 
-        if (
-          e.target === noteRef.current ||
-          noteRef.current.contains(e.target)
-        ) {
-          isDragging = true;
-        }
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = noteRef.current.getBoundingClientRect();
+        initialX = rect.left;
+        initialY = rect.top;
+        document.addEventListener("mousemove", handleMouseMove);
+        document.addEventListener("mouseup", handleMouseUp);
+        e.preventDefault();
       };
 
-      const dragEnd = () => {
-        initialX = currentX;
-        initialY = currentY;
-        isDragging = false;
+      const handleMouseMove = (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+        const newLeft = initialX + deltaX;
+        const newTop = initialY + deltaY;
+        noteRef.current.style.left = newLeft + "px";
+        noteRef.current.style.top = newTop + "px";
       };
 
-      const drag = (e) => {
+      const handleMouseUp = (e) => {
         if (isDragging) {
-          e.preventDefault();
+          const deltaX = e.clientX - startX;
+          const deltaY = e.clientY - startY;
+          const newLeft = initialX + deltaX;
+          const newTop = initialY + deltaY;
 
-          if (e.type === "touchmove") {
-            currentX = e.touches[0].clientX - initialX;
-            currentY = e.touches[0].clientY - initialY;
-          } else {
-            currentX = e.clientX - initialX;
-            currentY = e.clientY - initialY;
-          }
-
-          xOffset = currentX;
-          yOffset = currentY;
-
-          noteRef.current.style.transform = `translate3d(${currentX}px, ${currentY}px, 0) ${position.transform}`;
+          // Update the position in the parent component
+          onPositionChange(note.id, {
+            left: newLeft + "px",
+            top: newTop + "px",
+            transform: note.position.transform,
+          });
         }
+        isDragging = false;
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
       };
 
-      noteRef.current.addEventListener("mousedown", dragStart);
-      document.addEventListener("mousemove", drag);
-      document.addEventListener("mouseup", dragEnd);
+      noteRef.current.addEventListener("mousedown", handleMouseDown);
 
       return () => {
         if (noteRef.current) {
-          noteRef.current.removeEventListener("mousedown", dragStart);
+          noteRef.current.removeEventListener("mousedown", handleMouseDown);
         }
-        document.removeEventListener("mousemove", drag);
-        document.removeEventListener("mouseup", dragEnd);
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
       };
     }
-  }, [position.transform]);
+  }, [note.id, note.position, onPositionChange]);
 
-  const edit = () => {
-    setEditing(true);
+  const noteStyles = {
+    position: "absolute",
+    width: "200px",
+    height: "200px",
+    backgroundColor: "#ffeb3b",
+    padding: "10px",
+    borderRadius: "5px",
+    boxShadow: "3px 3px 10px rgba(0,0,0,0.3)",
+    cursor: "move",
+    fontFamily: "Arial, sans-serif",
+    ...note.position,
   };
 
-  const save = () => {
-    onChange(textareaRef.current.value, index);
-    setEditing(false);
+  const buttonStyles = {
+    margin: "5px",
+    padding: "5px 10px",
+    border: "none",
+    borderRadius: "3px",
+    cursor: "pointer",
   };
 
-  const remove = () => {
-    onRemove(index);
-  };
-
-  const renderDisplay = () => (
-    <div ref={noteRef} className="note" style={position}>
-      <p>{children}</p>
-      <span>
+  if (editing) {
+    return (
+      <div
+        ref={noteRef}
+        style={noteStyles}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <textarea
+          ref={textareaRef}
+          defaultValue={note.text}
+          style={{
+            width: "100%",
+            height: "120px",
+            border: "none",
+            background: "transparent",
+            fontSize: "14px",
+            resize: "none",
+            outline: "none",
+            color: "black",
+          }}
+        />
         <button
-          onClick={edit}
-          className="btn btn-primary"
-          style={{ fontSize: "12px", padding: "4px 8px" }}
+          onClick={() => {
+            onChange(note.id, textareaRef.current.value);
+            setEditing(false);
+          }}
+          style={{
+            ...buttonStyles,
+            backgroundColor: "#4CAF50",
+            color: "white",
+          }}
         >
-          ✏️
+          Save
         </button>
-        <button
-          onClick={remove}
-          className="btn btn-danger"
-          style={{ fontSize: "12px", padding: "4px 8px" }}
-        >
-          🗑️
-        </button>
-      </span>
-    </div>
-  );
+      </div>
+    );
+  }
 
-  const renderForm = () => (
-    <div ref={noteRef} className="note" style={position}>
-      <textarea
-        ref={textareaRef}
-        defaultValue={children}
-        className="form-control"
+  return (
+    <div
+      ref={noteRef}
+      style={noteStyles}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div
         style={{
-          height: "75%",
-          background: "rgba(255, 255, 255, .5)",
-          border: "none",
-          resize: "none",
-          fontFamily: '"Shadows Into Light", Arial',
-          fontSize: "18px",
-          padding: "5px",
-        }}
-      />
-      <button
-        onClick={save}
-        className="btn btn-success btn-sm"
-        style={{
-          position: "absolute",
-          bottom: "5px",
-          right: "5px",
-          fontSize: "12px",
-          padding: "4px 8px",
+          height: "120px",
+          overflow: "hidden",
+          fontSize: "14px",
+          marginBottom: "10px",
+          color: "black",
         }}
       >
-        💾
-      </button>
+        {note.text}
+      </div>
+      {isHovered && (
+        <>
+          <button
+            onClick={() => setEditing(true)}
+            style={{
+              ...buttonStyles,
+              backgroundColor: "#2196F3",
+              color: "white",
+            }}
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => onRemove(note.id)}
+            style={{
+              ...buttonStyles,
+              backgroundColor: "#f44336",
+              color: "white",
+            }}
+          >
+            Delete
+          </button>
+        </>
+      )}
     </div>
   );
-
-  return editing ? renderForm() : renderDisplay();
 };
 
-const Board = ({ count = 50 }) => {
+const StickyNotesApp = () => {
   const [notes, setNotes] = useState([]);
-  const [uniqueId, setUniqueId] = useState(0);
+  const [nextId, setNextId] = useState(1);
 
-  // Load notes from localStorage on component mount
+  // Load from localStorage on mount
   useEffect(() => {
-    // In your local environment, uncomment this code:
-    /*
-    const savedNotes = localStorage.getItem('stickyNotes');
-    if (savedNotes) {
-      const parsedNotes = JSON.parse(savedNotes);
-      setNotes(parsedNotes);
-      // Set the unique ID to be higher than any existing note ID
-      const maxId = parsedNotes.reduce((max, note) => Math.max(max, note.id), 0);
-      setUniqueId(maxId + 1);
+    try {
+      const saved = localStorage.getItem("stickyNotes");
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.notes && Array.isArray(data.notes)) {
+          // Ensure all notes have positions
+          const notesWithPositions = data.notes.map((note) => ({
+            ...note,
+            position: note.position || {
+              left: Math.random() * (window.innerWidth - 250) + "px",
+              top: Math.random() * (window.innerHeight - 250) + 100 + "px",
+              transform: `rotate(${(Math.random() - 0.5) * 20}deg)`,
+            },
+          }));
+          setNotes(notesWithPositions);
+          setNextId(data.nextId || notesWithPositions.length + 1);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading from localStorage:", error);
     }
-    */
   }, []);
 
-  // Save notes to localStorage whenever notes change
+  // Save to localStorage whenever notes change
   useEffect(() => {
-    // In your local environment, uncomment this code:
-    /*
-    localStorage.setItem('stickyNotes', JSON.stringify(notes));
-    */
-  }, [notes]);
-
-  const nextId = () => {
-    const id = uniqueId;
-    setUniqueId((prev) => prev + 1);
-    return id;
-  };
-
-  const add = (text) => {
-    if (notes.length >= count) {
-      alert(`Creating ${notes.length + 1} notes is ridiculous`);
-      return;
+    if (notes.length > 0 || nextId > 1) {
+      try {
+        localStorage.setItem(
+          "stickyNotes",
+          JSON.stringify({
+            notes,
+            nextId,
+          })
+        );
+      } catch (error) {
+        console.error("Error saving to localStorage:", error);
+      }
     }
+  }, [notes, nextId]);
 
-    setNotes((prev) => [
-      ...prev,
-      {
-        id: nextId(),
-        note: text,
+  const addNote = () => {
+    const newNote = {
+      id: nextId,
+      text: "New Note - Click Edit to change this text",
+      position: {
+        left: Math.random() * (window.innerWidth - 250) + "px",
+        top: Math.random() * (window.innerHeight - 250) + 100 + "px",
+        transform: `rotate(${(Math.random() - 0.5) * 20}deg)`,
       },
-    ]);
+    };
+    setNotes((prevNotes) => [...prevNotes, newNote]);
+    setNextId((prevId) => prevId + 1);
   };
 
-  const update = (newText, index) => {
-    setNotes((prev) => {
-      const newNotes = [...prev];
-      newNotes[index].note = newText;
-      return newNotes;
-    });
+  const updateNote = (id, newText) => {
+    setNotes((prevNotes) =>
+      prevNotes.map((note) =>
+        note.id === id ? { ...note, text: newText } : note
+      )
+    );
   };
 
-  const remove = (index) => {
-    setNotes((prev) => {
-      const newNotes = [...prev];
-      newNotes.splice(index, 1);
-      return newNotes;
-    });
+  const updateNotePosition = (id, newPosition) => {
+    setNotes((prevNotes) =>
+      prevNotes.map((note) =>
+        note.id === id ? { ...note, position: newPosition } : note
+      )
+    );
+  };
+
+  const removeNote = (id) => {
+    setNotes((prevNotes) => prevNotes.filter((note) => note.id !== id));
   };
 
   return (
     <div
-      className="board"
       style={{
+        width: "100vw",
         height: "100vh",
-        width: "100%",
-        background: "#eab92d",
-        background:
-          "radial-gradient(ellipse at center, #eab92d 57%, #c79810 99%)",
+        background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
         position: "relative",
         overflow: "hidden",
-        margin: 0,
-        padding: 0,
       }}
     >
-      {notes.map((note, i) => (
-        <Note
-          key={note.id}
-          id={note.id}
-          index={i}
-          onChange={update}
-          onRemove={remove}
-        >
-          {note.note}
-        </Note>
-      ))}
       <button
-        className="btn btn-sm btn-success"
-        onClick={() => add("New Note")}
+        onClick={addNote}
         style={{
           position: "fixed",
-          top: "10px",
-          right: "10px",
+          top: "20px",
+          right: "20px",
+          padding: "10px 20px",
           fontSize: "16px",
-          padding: "8px 12px",
+          backgroundColor: "#4CAF50",
+          color: "white",
+          border: "none",
+          borderRadius: "5px",
+          cursor: "pointer",
           zIndex: 1000,
         }}
       >
-        ➕ Add Note
+        + Add Note
       </button>
 
-      <style jsx>{`
-        @import url(https://fonts.googleapis.com/css?family=Shadows+Into+Light);
-
-        body,
-        html {
-          margin: 0;
-          padding: 0;
-          height: 100%;
-          overflow: hidden;
-        }
-
-        .note {
-          height: 150px;
-          width: 150px;
-          background-color: #ffeb3b;
-          margin: 2px 0;
-          position: absolute;
-          cursor: grab;
-          box-shadow: 5px 5px 15px 0 rgba(0, 0, 0, 0.2);
-          border-radius: 3px;
-          user-select: none;
-        }
-
-        .note:active {
-          cursor: grabbing;
-        }
-
-        .note p {
-          font-size: 18px;
-          padding: 8px;
-          font-family: "Shadows Into Light", Arial, sans-serif;
-          margin: 0;
-          word-wrap: break-word;
-          overflow: hidden;
-          height: calc(100% - 40px);
-        }
-
-        .note:hover > span {
-          opacity: 1;
-        }
-
-        .note > span {
-          position: absolute;
-          bottom: 5px;
-          right: 5px;
-          opacity: 0;
-          transition: opacity 0.25s linear;
-        }
-
-        .note button {
-          margin: 2px;
-          border: none;
-          border-radius: 3px;
-          cursor: pointer;
-        }
-
-        .btn {
-          display: inline-block;
-          font-weight: 400;
-          text-align: center;
-          white-space: nowrap;
-          vertical-align: middle;
-          user-select: none;
-          border: 1px solid transparent;
-          line-height: 1.5;
-          border-radius: 0.25rem;
-          transition: color 0.15s ease-in-out,
-            background-color 0.15s ease-in-out;
-        }
-
-        .btn-primary {
-          color: #fff;
-          background-color: #007bff;
-          border-color: #007bff;
-        }
-
-        .btn-primary:hover {
-          background-color: #0056b3;
-          border-color: #004085;
-        }
-
-        .btn-danger {
-          color: #fff;
-          background-color: #dc3545;
-          border-color: #dc3545;
-        }
-
-        .btn-danger:hover {
-          background-color: #c82333;
-          border-color: #bd2130;
-        }
-
-        .btn-success {
-          color: #fff;
-          background-color: #28a745;
-          border-color: #28a745;
-        }
-
-        .btn-success:hover {
-          background-color: #218838;
-          border-color: #1e7e34;
-        }
-
-        .form-control {
-          display: block;
-          width: 100%;
-          font-size: 1rem;
-          font-weight: 400;
-          line-height: 1.5;
-          color: #495057;
-          border: 1px solid #ced4da;
-          border-radius: 0.25rem;
-          transition: border-color 0.15s ease-in-out,
-            box-shadow 0.15s ease-in-out;
-        }
-
-        .form-control:focus {
-          color: #495057;
-          border-color: #80bdff;
-          outline: 0;
-          box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-        }
-      `}</style>
+      {notes.map((note) => (
+        <Note
+          key={note.id}
+          note={note}
+          onChange={updateNote}
+          onRemove={removeNote}
+          onPositionChange={updateNotePosition}
+        />
+      ))}
     </div>
   );
 };
 
-export default function StickyNotesApp() {
-  return <Board count={50} />;
-}
+export default StickyNotesApp;
